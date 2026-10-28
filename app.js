@@ -35,16 +35,17 @@ const FOXGUARD_DEFAULTS = {
       target=new URL(document.getElementById('website').value.trim());
       if(!['https:','http:'].includes(target.protocol)||target.username||target.password||target.search||target.hash)throw new Error('Invalid URL');
     } catch {status.classList.add('error');status.textContent='Enter a public HTTP(S) URL without credentials, query parameters or fragments.';return;}
-    const payload={website:target.href,email:document.getElementById('email').value.trim(),permission:document.getElementById('permission').checked,plan:planField.value,selected_plan:labels[planField.value],requestedAt:new Date().toISOString(),_subject:'FoxGuard QA — Website audit request',_template:'table'};
+    const payload={url:target.href,email:document.getElementById('email').value.trim(),permission:document.getElementById('permission').checked,plan:planField.value,selected_plan:labels[planField.value],requestedAt:new Date().toISOString(),_subject:'New FoxGuard QA Request',_captcha:'false',_template:'table'};
     if(!payload.permission)return;
-    const message=`Hello FoxGuard QA,\n\nWebsite: ${payload.website}\nWork email: ${payload.email}\nSelected plan: ${payload.selected_plan}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
+    const message=`Hello FoxGuard QA,\n\nWebsite: ${payload.url}\nWork email: ${payload.email}\nSelected plan: ${payload.selected_plan}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
     fallback.href=`mailto:tonygokul30@gmail.com?subject=${encodeURIComponent('FoxGuard QA — Website audit request')}&body=${encodeURIComponent(message)}`;
     fallback.textContent='Send this request by email instead →';
     button.disabled=true;
     try {
       if(!navigator.onLine)throw new Error('You appear to be offline. Reconnect and retry, or use the email fallback.');
       const endpoint=https(config.WEBHOOK_URL);
-      const response=await fetch(endpoint.href,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),credentials:'omit',signal:AbortSignal.timeout(20000)});
+      // Browsers supply Origin and Referer; these must not be forged in headers.
+      const response=await fetch(endpoint.href,{method:'POST',mode:'cors',referrerPolicy:'strict-origin-when-cross-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),credentials:'omit',signal:AbortSignal.timeout(20000)});
       if(!response.ok)throw new Error('The request service is unavailable. Please retry or use the email fallback.');
       const result=await response.json();
       if(result.success===false||result.success==='false')throw new Error('The request service could not accept this submission. Please use the email fallback.');
