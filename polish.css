@@ -1,0 +1,37 @@
+/* Small, dependency-free visual layer; forms and checkout behavior are unchanged. */
+.landing-page{--bg:#090d16;--panel:#0f172a;--orange:#f97316;--green:#6ee7b7;background:radial-gradient(ellipse at 78% 8%,#f9731609,transparent 32%),linear-gradient(160deg,#090d16,#0f172a);background-color:#090d16}
+.landing-page .nav-wrap{background:#090d16eb;border-bottom-color:#f9731626}
+.landing-page .hero h1 span,.landing-page .eyebrow,.landing-page .text-link:hover{color:#fb923c}
+.landing-page .audience-band{background:#0f172a99;border-color:#ffffff0d}
+.landing-page .audit-section{background:#0f172ab3;border-color:#ffffff10}
+.landing-page .monitor,.landing-page .sample-report,.landing-page .price-card{background:linear-gradient(135deg,#1b2839e8,#0f172ae8);border:1px solid #f9731633;box-shadow:inset 0 1px 0 #ffffff08,0 12px 32px #0003;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.landing-page .sample-report{transform:none;color:#f1f5f9}
+.landing-page .sample-report .brand,.landing-page .sample-report h3,.landing-page .sample-report .gauge-label strong{color:#f1f5f9}
+.landing-page .sample-report .sample-title,.landing-page .sample-report .sample-disclaimer{color:#b3c0d2}
+.landing-page .sample-report .demo-tag{color:#b3c0d2;border-color:#ffffff30}
+.landing-page .sample-report .score-layout{border-color:#ffffff14}
+.landing-page .sample-report .sample-checks li{border-color:#ffffff14;color:#d4deeb}
+.landing-page .price-card.featured{border-color:#f9731666}
+.landing-page .price-card,.landing-page .button{transition:transform .25s ease,border-color .25s ease,box-shadow .25s ease,background-color .25s ease}
+@media(hover:hover){.landing-page .price-card:hover{transform:translateY(-2px);border-color:#f9731680;box-shadow:0 16px 36px #0004,0 0 20px #f9731608}.landing-page .button:hover{transform:translateY(-2px);box-shadow:0 6px 20px #f973161c}}
+.landing-page .founding{background:linear-gradient(110deg,#f9731612,#0f172a80);border-color:#f9731660}
+.founding-offer-badge{display:inline-flex;align-items:center;gap:9px;border:1px solid #f973164d;border-radius:30px;padding:6px 12px;color:#fdba74!important;letter-spacing:1px}
+.founding-offer-badge:before{content:'';width:6px;height:6px;border-radius:50%;background:#fb923c;animation:founding-glow 3s ease-in-out infinite}
+@keyframes founding-glow{0%,100%{box-shadow:0 0 0 0 #f9731630;opacity:.75}50%{box-shadow:0 0 0 5px #f9731600;opacity:1}}
+.preview-tabs{display:flex;gap:4px;padding:4px;background:#090d16a8;border:1px solid #ffffff12;border-radius:9px;margin:22px 0}
+.preview-tab{flex:1;min-width:0;border:1px solid transparent;border-radius:6px;background:transparent;color:#b0bdcf;padding:10px 8px;font:inherit;font-size:12px;font-weight:650;cursor:pointer;transition:background-color .25s ease,color .25s ease,border-color .25s ease}
+.preview-tab[aria-selected=true]{color:#ffbc86;background:#f973161a;border-color:#f9731640}
+.preview-tab:hover{color:#fff}.preview-tab:focus-visible{outline:2px solid #fb923c;outline-offset:2px}
+.health-preview .score-layout{gap:22px;align-items:center;margin:24px 0}
+.health-gauge{position:relative;width:142px;height:142px;flex:none;display:grid;place-items:center}
+.health-gauge svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.gauge-track,.gauge-progress{fill:none;stroke-width:7}.gauge-track{stroke:#ffffff0b}.gauge-progress{stroke:#6ee7b7;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:2}
+.gauge-label{text-align:center;line-height:1.1}.gauge-label strong{display:block;font-size:42px;letter-spacing:-2px;font-variant-numeric:tabular-nums}.gauge-label small{display:block;color:#a7b7c9;font-size:10px;letter-spacing:1.3px;margin-top:8px}
+.health-preview .score-layout h3{font-size:21px;margin:12px 0 8px}.health-preview .score-layout p{font-size:11px;margin:0;color:#a7b7c9}
+.health-preview .pill.good{color:#6ee7b7;background:#10b98115;border:1px solid #10b98140}
+.preview-device{display:inline-block;width:14px;height:10px;border:1px solid #a7b7c9;border-radius:2px;margin-right:6px;vertical-align:middle;transition:width .25s ease,height .25s ease}
+.health-preview[data-view=mobile] .preview-device{width:7px;height:12px}
+.health-preview .sample-checks strong{font-size:10px;color:#6ee7b7;letter-spacing:.5px}
+.health-preview .sample-disclaimer{border-top:1px solid #ffffff10;padding-top:16px;margin-bottom:0}
+@media(max-width:400px){.health-gauge{width:112px;height:112px}.gauge-label strong{font-size:34px}.health-preview .score-layout{gap:14px;flex-wrap:wrap}.preview-tab{font-size:11px}.health-preview .score-layout h3{font-size:18px}}
+@media(prefers-reduced-motion:reduce){.founding-offer-badge:before{animation:none}.landing-page .price-card,.landing-page .button,.preview-tab,.preview-device{transition:none}.landing-page .price-card:hover,.landing-page .button:hover{transform:none}}
