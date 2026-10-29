@@ -27,8 +27,19 @@ const FOXGUARD_DEFAULTS = {
       status.classList.remove('error');status.textContent=`Selected: ${labels[plan]}. Submit your request to arrange activation. No payment or monitoring starts automatically.`;
     });
   });
+  // Bound both the request and response parsing, including browsers without AbortSignal.timeout.
+  const request = async (url, options, readJson = false) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetch(url, {...options, signal: controller.signal});
+      if (!readJson) return;
+      if (!response.ok) throw new Error('Submission unavailable');
+      return await response.json();
+    } finally {clearTimeout(timeout);}
+  };
   form.addEventListener('submit',async event=>{
-    event.preventDefault();if(!form.reportValidity())return;
+    event.preventDefault();if(button.disabled||!form.reportValidity())return;
     fallback.hidden=true;status.classList.remove('error');status.textContent='';
     let target;
     try {
@@ -39,25 +50,30 @@ const FOXGUARD_DEFAULTS = {
     if(!payload.permission)return;
     const message=`Hello FoxGuard QA,\n\nWebsite: ${payload.url}\nWork email: ${payload.email}\nSelected plan: ${payload.selected_plan}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
     fallback.href=`mailto:tonygokul30@gmail.com?subject=${encodeURIComponent('FoxGuard QA — Website audit request')}&body=${encodeURIComponent(message)}`;
-    fallback.textContent='Send this request by email instead →';
+    // The prepared email is available immediately, regardless of background delivery.
+    fallback.textContent='Send audit request by email →';
+    fallback.hidden=false;
+    status.textContent='Request ready! Click below to send your audit request directly to our team, or email tonygokul30@gmail.com.';
     button.disabled=true;
     try {
-      if(!navigator.onLine)throw new Error('You appear to be offline. Reconnect and retry, or use the email fallback.');
       const endpoint=https(config.WEBHOOK_URL);
-      // Browsers supply Origin and Referer; these must not be forged in headers.
-      const response=await fetch(endpoint.href,{method:'POST',mode:'cors',referrerPolicy:'strict-origin-when-cross-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),credentials:'omit',signal:AbortSignal.timeout(20000)});
-      if(!response.ok)throw new Error('The request service is unavailable. Please retry or use the email fallback.');
-      const result=await response.json();
-      if(result.success===false||result.success==='false')throw new Error('The request service could not accept this submission. Please use the email fallback.');
-      if(endpoint.hostname==='formsubmit.co' && result.success!==true && result.success!=='true')throw new Error('Submission was not confirmed. Please use the email fallback.');
-      if(/activat|confirm your email/i.test(result.message||'')) {
-        status.textContent='The request service requires owner email activation. Please use the email fallback while setup is completed.';fallback.hidden=false;return;
+      try {
+        // Browsers supply Origin and Referer; these must not be forged in headers.
+        const result=await request(endpoint.href,{method:'POST',mode:'cors',referrerPolicy:'strict-origin-when-cross-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),credentials:'omit'},true);
+        if(result.success===false||result.success==='false'||(endpoint.hostname==='formsubmit.co'&&result.success!==true&&result.success!=='true')||/activat|confirm your email/i.test(result.message||''))throw new Error('Submission unconfirmed');
+      } catch {
+        if(endpoint.hostname==='formsubmit.co') {
+          // A simple multipart POST avoids the AJAX preflight. Its opaque response
+          // cannot confirm delivery, so keep the prepared email available either way.
+          const data=new FormData();
+          Object.entries(payload).forEach(([key,value])=>data.append(key,String(value)));
+          const fallbackEndpoint=new URL(endpoint.href);
+          fallbackEndpoint.pathname=fallbackEndpoint.pathname.replace(/^\/ajax\//,'/');
+          await request(fallbackEndpoint.href,{method:'POST',mode:'no-cors',body:data,credentials:'omit',referrerPolicy:'strict-origin-when-cross-origin'});
+        }
       }
-      status.textContent='Request received! Your FoxGuard QA report is being prepared.';
-      document.getElementById('delivery-hint').textContent='Your request is queued for FoxGuard’s review. Scope and timing are confirmed by email; no automatic audit, payment or subscription has started.';
-      form.reset();
-    } catch(error) {
-      status.classList.add('error');status.textContent=error.name==='TimeoutError'?'The request timed out. Retry or use the email fallback.':error.message;fallback.hidden=false;
+    } catch {
+      // Network, timeout and service errors never replace the visitor-facing message.
     } finally {button.disabled=false;}
   });
 })();
