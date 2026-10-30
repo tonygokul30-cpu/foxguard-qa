@@ -1,0 +1,9 @@
+{
+  "name": "foxguard-qa-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": "22.x"},
+  "scripts": {"build": "node scripts/build.js", "test": "node --test --test-concurrency=1 tests/*.test.js"},
+  "dependencies": {"ipaddr.js": "2.5.0"}
+}

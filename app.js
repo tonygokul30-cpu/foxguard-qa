@@ -1,79 +1,88 @@
-// Configure public integration URLs here, or override them in config.js.
-const FOXGUARD_DEFAULTS = {
-  WEBHOOK_URL: 'https://formsubmit.co/ajax/tonygokul30@gmail.com',
-  FOUNDING_CHECKOUT_URL: '', STARTER_CHECKOUT_URL: '', PRO_CHECKOUT_URL: ''
-};
-(() => {
+// Public URLs only. Never put tokens or SMTP credentials in this file.
+const FOXGUARD_DEFAULTS={API_BASE_URL:'',FOUNDING_CHECKOUT_URL:'',STARTER_CHECKOUT_URL:'',PRO_CHECKOUT_URL:''};
+(()=>{
   'use strict';
-  const overrides = window.FOXGUARD_CONFIG || {};
-  const config = Object.fromEntries(Object.entries(FOXGUARD_DEFAULTS).map(([key,value]) => [key, overrides[key] || value]));
-  const form = document.getElementById('audit-form');
-  const status = document.getElementById('form-status');
-  const button = document.getElementById('submit-audit');
-  const fallback = document.getElementById('request-fallback');
-  const planField = document.getElementById('selected-plan');
-  const labels = {'free-audit':'Free website audit',founding:'$99/mo Founding Deal',starter:'$199/mo Starter Protection',growth:'$499/mo Growth Pro'};
-  const https = value => {const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password)throw new Error('A secure integration URL is required. Please use the email fallback.');return url;};
+  const config={...FOXGUARD_DEFAULTS,...(window.FOXGUARD_CONFIG || {})};
+  const form=document.getElementById('audit-form'),status=document.getElementById('form-status');
+  const button=document.getElementById('submit-audit'),fallback=document.getElementById('request-fallback');
+  const planField=document.getElementById('selected-plan'),hint=document.getElementById('delivery-hint');
+  const cancel=document.getElementById('cancel-checkout');
+  const labels={'free-audit':'Free website audit',founding:'$99/mo Founding Deal',starter:'$199/mo Starter Protection',growth:'$499/mo Growth Pro'};
   const checkoutKeys={founding:'FOUNDING_CHECKOUT_URL',starter:'STARTER_CHECKOUT_URL',growth:'PRO_CHECKOUT_URL'};
-  document.getElementById('year').textContent=new Date().getFullYear();
-  document.getElementById('delivery-hint').textContent='Submit your request here. We review scope and arrange your audit; submission does not start a subscription or charge you.';
+  let pendingCheckout=null,pendingRequest=null;
+  const defaultHint='Your public-page audit runs automatically. Reports are emailed to the address you enter. Delivery time depends on the audit queue.';
+  document.getElementById('year').textContent=new Date().getFullYear();hint.textContent=defaultHint;
+  function requestUrl(){
+    if(!config.API_BASE_URL&&location.hostname.endsWith('github.io'))throw new Error('API configuration required');
+    const base=new URL(config.API_BASE_URL || location.origin);
+    if(base.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(base.hostname))throw new Error('Secure API required');
+    if(base.username||base.password)throw new Error('Invalid API configuration');
+    return new URL('/api/request-audit',base).href;
+  }
+  function checkoutUrl(plan){
+    const url=new URL(config[checkoutKeys[plan]]);
+    if(url.protocol!=='https:'||url.username||url.password||!['rzp.io','razorpay.com'].some(host=>url.hostname===host||url.hostname.endsWith('.'+host)))throw new Error('Checkout unavailable');
+    return url.href;
+  }
+  function resetCheckout(){pendingCheckout=null;cancel.hidden=true;button.textContent='Send My Free FoxGuard Report ↗';hint.textContent=defaultHint;}
+  cancel.addEventListener('click',()=>{resetCheckout();status.textContent='Complete the form to request your free audit.';});
+  planField.addEventListener('change',()=>{if(pendingCheckout){pendingCheckout=checkoutKeys[planField.value]?planField.value:null;cancel.hidden=!pendingCheckout;button.textContent=pendingCheckout?'Continue to secure checkout ↗':'Send My Free FoxGuard Report ↗';}});
+  function payload(){
+    const url=new URL(document.getElementById('website').value.trim());
+    if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||(url.port&&!['80','443'].includes(url.port)))throw new Error('Invalid public URL');
+    return {url:url.href,email:document.getElementById('email').value.trim(),plan:planField.value,permission:document.getElementById('permission').checked};
+  }
+  function prepareEmail(data){
+    const message=`Hello FoxGuard QA,\n\nWebsite: ${data.url}\nWork email: ${data.email}\nSelected plan: ${labels[data.plan]}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
+    fallback.href=`mailto:tonygokul30@gmail.com?subject=${encodeURIComponent('FoxGuard QA — Website audit request')}&body=${encodeURIComponent(message)}`;
+  }
+  async function submit(){
+    if(button.disabled||!form.reportValidity())return;
+    status.classList.remove('error');fallback.hidden=true;
+    let data;
+    try{data=payload();}catch{status.classList.add('error');status.textContent='Enter a public HTTP(S) URL without credentials, query parameters, fragments or custom ports.';return;}
+    if(!data.permission)return;
+    const checkout=pendingCheckout;
+    data.mode=checkout?'lead-capture':'audit';prepareEmail(data);
+    const fingerprint=JSON.stringify(data);
+    if(pendingRequest?.fingerprint!==fingerprint)pendingRequest={fingerprint,id:crypto.randomUUID()};
+    button.disabled=true;cancel.disabled=true;
+    status.textContent=checkout?'Saving your website details before secure checkout…':'Starting your website audit…';
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+    try{
+      // Validate the destination before storing the lead. Never navigate on API failure.
+      const destination=checkout?checkoutUrl(checkout):null;
+      const response=await fetch(requestUrl(),{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/json','Idempotency-Key':pendingRequest.id},body:JSON.stringify(data),signal:controller.signal});
+      const result=await response.json();
+      if(!response.ok||result.ok!==true){
+        if(response.status===429){status.textContent='You have reached the request limit. Please try again later or email tonygokul30@gmail.com.';fallback.hidden=false;return;}
+        if(response.status===400){status.textContent='Check your website URL, email, and testing permission, then try again.';fallback.hidden=false;return;}
+        throw new Error('Request not confirmed');
+      }
+      if(checkout){
+        status.textContent=`Details saved. Opening secure checkout. Use ${data.email} as your billing email so we can activate your website automatically.`;
+        window.location.assign(destination);
+      }else{
+        status.textContent=`Scanning your website now in a real browser... Your report will arrive at ${data.email} within 2 minutes!`;
+        hint.textContent='Your audit request has been accepted. Two minutes is an estimate; GitHub queues and email delivery can take longer. Check your spam folder too.';
+      }
+    }catch{
+      status.textContent='We could not confirm your request yet. Please retry shortly, or send your prepared request by email to tonygokul30@gmail.com.';
+      fallback.hidden=false;
+    }finally{clearTimeout(timeout);button.disabled=false;cancel.disabled=false;}
+  }
+  form.addEventListener('submit',event=>{event.preventDefault();void submit();});
   document.querySelectorAll('[data-plan]').forEach(link=>{
     const plan=link.dataset.plan;
-    try {link.href=config[checkoutKeys[plan]] ? https(config[checkoutKeys[plan]]).href : '#audit';} catch {link.href='#audit';}
     link.addEventListener('click',event=>{
-      if(link.getAttribute('href')!=='#audit')return;
-      event.preventDefault();planField.value=plan;
+      event.preventDefault();if(button.disabled)return;
+      pendingCheckout=plan;planField.value=plan;cancel.hidden=false;
+      button.textContent='Continue to secure checkout ↗';
+      status.classList.remove('error');fallback.hidden=true;
+      status.textContent=`Selected: ${labels[plan]}. Enter your website URL and email and confirm testing permission before checkout.`;
+      hint.textContent='Use the same email at Razorpay checkout. Your website details are saved before payment; lead capture does not start an audit or subscription.';
       document.getElementById('audit').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
-      status.classList.remove('error');status.textContent=`Selected: ${labels[plan]}. Submit your request to arrange activation. No payment or monitoring starts automatically.`;
+      if(form.checkValidity())void submit();else document.getElementById('website').focus({preventScroll:true});
     });
-  });
-  // Bound both the request and response parsing, including browsers without AbortSignal.timeout.
-  const request = async (url, options, readJson = false) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    try {
-      const response = await fetch(url, {...options, signal: controller.signal});
-      if (!readJson) return;
-      if (!response.ok) throw new Error('Submission unavailable');
-      return await response.json();
-    } finally {clearTimeout(timeout);}
-  };
-  form.addEventListener('submit',async event=>{
-    event.preventDefault();if(button.disabled||!form.reportValidity())return;
-    fallback.hidden=true;status.classList.remove('error');status.textContent='';
-    let target;
-    try {
-      target=new URL(document.getElementById('website').value.trim());
-      if(!['https:','http:'].includes(target.protocol)||target.username||target.password||target.search||target.hash)throw new Error('Invalid URL');
-    } catch {status.classList.add('error');status.textContent='Enter a public HTTP(S) URL without credentials, query parameters or fragments.';return;}
-    const payload={url:target.href,email:document.getElementById('email').value.trim(),permission:document.getElementById('permission').checked,plan:planField.value,selected_plan:labels[planField.value],requestedAt:new Date().toISOString(),_subject:'New FoxGuard QA Request',_captcha:'false',_template:'table'};
-    if(!payload.permission)return;
-    const message=`Hello FoxGuard QA,\n\nWebsite: ${payload.url}\nWork email: ${payload.email}\nSelected plan: ${payload.selected_plan}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
-    fallback.href=`mailto:tonygokul30@gmail.com?subject=${encodeURIComponent('FoxGuard QA — Website audit request')}&body=${encodeURIComponent(message)}`;
-    // The prepared email is available immediately, regardless of background delivery.
-    fallback.textContent='Send audit request by email →';
-    fallback.hidden=false;
-    status.textContent='Request ready! Click below to send your audit request directly to our team, or email tonygokul30@gmail.com.';
-    button.disabled=true;
-    try {
-      const endpoint=https(config.WEBHOOK_URL);
-      try {
-        // Browsers supply Origin and Referer; these must not be forged in headers.
-        const result=await request(endpoint.href,{method:'POST',mode:'cors',referrerPolicy:'strict-origin-when-cross-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload),credentials:'omit'},true);
-        if(result.success===false||result.success==='false'||(endpoint.hostname==='formsubmit.co'&&result.success!==true&&result.success!=='true')||/activat|confirm your email/i.test(result.message||''))throw new Error('Submission unconfirmed');
-      } catch {
-        if(endpoint.hostname==='formsubmit.co') {
-          // A simple multipart POST avoids the AJAX preflight. Its opaque response
-          // cannot confirm delivery, so keep the prepared email available either way.
-          const data=new FormData();
-          Object.entries(payload).forEach(([key,value])=>data.append(key,String(value)));
-          const fallbackEndpoint=new URL(endpoint.href);
-          fallbackEndpoint.pathname=fallbackEndpoint.pathname.replace(/^\/ajax\//,'/');
-          await request(fallbackEndpoint.href,{method:'POST',mode:'no-cors',body:data,credentials:'omit',referrerPolicy:'strict-origin-when-cross-origin'});
-        }
-      }
-    } catch {
-      // Network, timeout and service errors never replace the visitor-facing message.
-    } finally {button.disabled=false;}
   });
 })();
