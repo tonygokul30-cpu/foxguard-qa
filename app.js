@@ -4,7 +4,7 @@ const FOXGUARD_DEFAULTS={API_BASE_URL:'',FOUNDING_CHECKOUT_URL:'',STARTER_CHECKO
   'use strict';
   const config={...FOXGUARD_DEFAULTS,...(window.FOXGUARD_CONFIG || {})};
   const form=document.getElementById('audit-form'),status=document.getElementById('form-status');
-  const button=document.getElementById('submit-audit'),fallback=document.getElementById('request-fallback');
+  const button=document.getElementById('submit-audit');
   const planField=document.getElementById('selected-plan'),hint=document.getElementById('delivery-hint');
   const cancel=document.getElementById('cancel-checkout');
   const labels={'free-audit':'Free website audit',founding:'$99/mo Founding Deal',starter:'$199/mo Starter Protection',growth:'$499/mo Growth Pro'};
@@ -30,24 +30,21 @@ const FOXGUARD_DEFAULTS={API_BASE_URL:'',FOUNDING_CHECKOUT_URL:'',STARTER_CHECKO
   function payload(){
     const url=new URL(document.getElementById('website').value.trim());
     if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||(url.port&&!['80','443'].includes(url.port)))throw new Error('Invalid public URL');
-    return {url:url.href,email:document.getElementById('email').value.trim(),plan:planField.value,permission:document.getElementById('permission').checked};
-  }
-  function prepareEmail(data){
-    const message=`Hello FoxGuard QA,\n\nWebsite: ${data.url}\nWork email: ${data.email}\nSelected plan: ${labels[data.plan]}\nI own or have explicit permission to test this website.\n\nPlease arrange my audit and reply with next steps.`;
-    fallback.href=`mailto:tonygokul30@gmail.com?subject=${encodeURIComponent('FoxGuard QA — Website audit request')}&body=${encodeURIComponent(message)}`;
+    return {url:url.href,email:document.getElementById('email').value.trim(),plan:planField.value,selected_plan:planField.value,permission:document.getElementById('permission').checked};
   }
   async function submit(){
     if(button.disabled||!form.reportValidity())return;
-    status.classList.remove('error');fallback.hidden=true;
+    status.classList.remove('error');
     let data;
     try{data=payload();}catch{status.classList.add('error');status.textContent='Enter a public HTTP(S) URL without credentials, query parameters, fragments or custom ports.';return;}
     if(!data.permission)return;
     const checkout=pendingCheckout;
-    data.mode=checkout?'lead-capture':'audit';prepareEmail(data);
+    data.mode=checkout?'lead-capture':'audit';
     const fingerprint=JSON.stringify(data);
     if(pendingRequest?.fingerprint!==fingerprint)pendingRequest={fingerprint,id:crypto.randomUUID()};
     button.disabled=true;cancel.disabled=true;
-    status.textContent=checkout?'Saving your website details before secure checkout…':'Starting your website audit…';
+    status.textContent=checkout?'Saving your website details before secure checkout…':`Audit started! FoxGuard QA is testing ${data.url} on desktop and mobile browsers right now (~45 seconds). Your full report and activation link will arrive at ${data.email} shortly.`;
+    hint.textContent='Connecting to the cloud audit service. Timing is an estimate after a runner starts; queue and email delivery can take longer.';
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{
       // Validate the destination before storing the lead. Never navigate on API failure.
@@ -55,20 +52,20 @@ const FOXGUARD_DEFAULTS={API_BASE_URL:'',FOUNDING_CHECKOUT_URL:'',STARTER_CHECKO
       const response=await fetch(requestUrl(),{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/json','Idempotency-Key':pendingRequest.id},body:JSON.stringify(data),signal:controller.signal});
       const result=await response.json();
       if(!response.ok||result.ok!==true){
-        if(response.status===429){status.textContent='You have reached the request limit. Please try again later or email tonygokul30@gmail.com.';fallback.hidden=false;return;}
-        if(response.status===400){status.textContent='Check your website URL, email, and testing permission, then try again.';fallback.hidden=false;return;}
+        if(response.status===429){status.textContent='You have reached the request limit. Please try again later or email tonygokul30@gmail.com.';return;}
+        if(response.status===400){status.textContent='Check your website URL, email, and testing permission, then try again.';return;}
         throw new Error('Request not confirmed');
       }
       if(checkout){
         status.textContent=`Details saved. Opening secure checkout. Use ${data.email} as your billing email so we can activate your website automatically.`;
         window.location.assign(destination);
       }else{
-        status.textContent=`Scanning your website now in a real browser... Your report will arrive at ${data.email} within 2 minutes!`;
-        hint.textContent='Your audit request has been accepted. Two minutes is an estimate; GitHub queues and email delivery can take longer. Check your spam folder too.';
+        status.textContent=`Audit started! FoxGuard QA is testing ${data.url} on desktop and mobile browsers right now (~45 seconds). Your full report and activation link will arrive at ${data.email} shortly.`;
+        hint.textContent='Your cloud audit request has been accepted. The report includes all three activation links. Timing is approximate; check your spam folder too.';
       }
     }catch{
-      status.textContent='We could not confirm your request yet. Please retry shortly, or send your prepared request by email to tonygokul30@gmail.com.';
-      fallback.hidden=false;
+      status.textContent='We could not confirm your cloud audit request yet. Please retry shortly. For help, contact tonygokul30@gmail.com.';
+
     }finally{clearTimeout(timeout);button.disabled=false;cancel.disabled=false;}
   }
   form.addEventListener('submit',event=>{event.preventDefault();void submit();});
@@ -78,7 +75,7 @@ const FOXGUARD_DEFAULTS={API_BASE_URL:'',FOUNDING_CHECKOUT_URL:'',STARTER_CHECKO
       event.preventDefault();if(button.disabled)return;
       pendingCheckout=plan;planField.value=plan;cancel.hidden=false;
       button.textContent='Continue to secure checkout ↗';
-      status.classList.remove('error');fallback.hidden=true;
+      status.classList.remove('error');
       status.textContent=`Selected: ${labels[plan]}. Enter your website URL and email and confirm testing permission before checkout.`;
       hint.textContent='Use the same email at Razorpay checkout. Your website details are saved before payment; lead capture does not start an audit or subscription.';
       document.getElementById('audit').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});

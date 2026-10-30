@@ -40,7 +40,7 @@ test('audit stores private mapping and dispatches exact authorized email inputs'
   assert.equal((await response.json()).message,'Audit started! Your FoxGuard QA report will arrive in your inbox in ~2 minutes.');
   assert.equal(g.state.leads[leadKey(lead.email)].url,lead.url);
   assert.equal(g.dispatches.length,1);
-  assert.deepEqual({...g.dispatches[0].inputs,request_id:'ID'},{target_url:lead.url,client_email:lead.email,authorized:'true',profile:'smoke',send_email:'true',enable_ai:'false',save_to_clients:'false',request_id:'ID'});
+  assert.deepEqual({...g.dispatches[0].inputs,request_id:'ID'},{target_url:lead.url,client_email:lead.email,selected_plan:'starter',authorized:'true',profile:'smoke',send_email:'true',enable_ai:'false',save_to_clients:'false',request_id:'ID'});
   assert.equal(JSON.stringify(g.state).includes('203.0.113.5'),false);
 });
 test('checkout capture saves paid plan without dispatch; repeated POST is idempotent',async()=>{
@@ -86,6 +86,18 @@ test('signed payment dispatches saved website for monitoring and repeated delive
   const g=github();await submit(g,{...lead,mode:'lead-capture'});
   for(let i=0;i<2;i++)assert.equal((await handleWebhook(webhook(paid),{env,store:g.store,lookup})).status,200);
   assert.equal(g.dispatches.length,1);assert.equal(g.dispatches[0].inputs.save_to_clients,'true');assert.equal(g.dispatches[0].inputs.client_email,lead.email);
+});
+test('free audit customer can activate via an emailed payment link',async()=>{
+  const g=github();await submit(g,{...lead,plan:'free-audit'});
+  assert.equal((await handleWebhook(webhook(paid),{env,store:g.store,lookup})).status,200);
+  assert.equal(g.dispatches.length,2);assert.equal(g.dispatches[1].inputs.save_to_clients,'true');
+  assert.equal(g.dispatches[1].inputs.selected_plan,'free-audit');
+});
+test('selected_plan alias is dispatched and conflicting plan values are rejected',async()=>{
+  const g=github();const {plan,...input}=lead;
+  assert.equal((await submit(g,{...input,selected_plan:'growth'})).status,200);
+  assert.equal(g.dispatches[0].inputs.selected_plan,'growth');
+  assert.equal((await submit(g,{...lead,selected_plan:'growth'},{key:'new-request-123456789'})).status,400);
 });
 test('bad/tampered raw signatures never touch storage; unsupported events are acknowledged',async()=>{
   const g=github();assert.equal((await handleWebhook(webhook(paid,'0'.repeat(64)),{env,store:g.store})).status,401);

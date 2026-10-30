@@ -16,9 +16,9 @@ The public repository contains the landing page and Vercel API. The private `ton
 
 - `GMAIL_USER`: the Gmail or Google Workspace sending address, normally `tonygokul30@gmail.com`.
 - `GMAIL_APP_PASSWORD`: that mailbox's App Password. Store it only as an Actions secret.
-- `RESEND_API_KEY`: optional alternative, used only when both Gmail settings are not configured. With configured Gmail, an SMTP failure fails the delivery instead of silently changing provider.
+- `RESEND_API_KEY`: optional alternative, used only when both Gmail settings are not configured. Gmail is tried first. If Gmail fails, configured Resend is tried for the customer; a final owner backup is clearly marked and never treated as confirmed customer delivery.
 
-Repository **variable** `RESEND_FROM_EMAIL` is required only if using Resend for external recipients: use a verified sender/domain. `onboarding@resend.dev` is a testing sender and must not be relied on to deliver to arbitrary visitors. Owner-only sandbox redirection has been removed.
+Repository **variable** `RESEND_FROM_EMAIL` is required only if using Resend for external recipients: use a verified sender/domain. `onboarding@resend.dev` is a testing sender and must not be relied on to deliver to arbitrary visitors. If direct delivery fails, an owner backup is retained separately in delivery.json. The customer request remains failed/retryable until direct delivery is accepted.
 
 The built-in `GITHUB_TOKEN` is supplied by Actions; no additional personal token is needed inside the engine. Scheduled monitoring now requests email delivery automatically, so `SEND_EMAIL=true` is no longer needed as a repository variable. `OPENAI_API_KEY`, `OPENAI_MODEL`, and `AI_ENABLED` remain optional for AI assistance; automated free audits use deterministic read-only browser checks.
 
@@ -34,9 +34,9 @@ Do not place any of these secrets in `config.js`. `API_BASE_URL` is a **public f
 
 ## Request and checkout behavior
 
-`POST /api/request-audit` accepts JSON `{url,email,plan,permission}`. `permission` must be the boolean `true`; supported plans are `free-audit`, `founding`, `starter`, `growth`. It validates public HTTP(S) destinations including all resolved A/AAAA addresses; local/reserved addresses, nonstandard ports, credentials, query strings and fragments are rejected. Browser requests use an `Idempotency-Key` that is retained for retries. The server also accepts `request_id` or creates an ID if omitted.
+`POST /api/request-audit` accepts JSON `{url,email,selected_plan,permission}` (`plan` remains a compatible alias). `permission` must be the boolean `true`; supported plans are `free-audit`, `founding`, `starter`, `growth`. It validates public HTTP(S) destinations including all resolved A/AAAA addresses; local/reserved addresses, nonstandard ports, credentials, query strings and fragments are rejected. Browser requests use an `Idempotency-Key` that is retained for retries. The server also accepts `request_id` or creates an ID if omitted.
 
-The API commits the authorized lead and durable job into private `leads.json`, then dispatches `run-audit.yml` with `target_url`, `client_email`, `authorized=true`, `send_email=true`, `profile=smoke`, `save_to_clients=false`, and an internal `request_id`. It returns success only after dispatch is accepted (or a previous idempotent dispatch is already confirmed).
+The API commits the authorized lead and durable job into private `leads.json`, then dispatches `run-audit.yml` with `target_url`, `client_email`, `selected_plan`, `authorized=true`, `send_email=true`, `profile=smoke`, `save_to_clients=false`, and an internal `request_id`. It returns success only after dispatch is accepted (or a previous idempotent dispatch is already confirmed).
 
 For checkout the browser sends `mode: "lead-capture"`. This saves the mapping without starting an audit or activating monitoring, then navigates to the configured Razorpay link. All pricing links first collect URL/email/permission; without JavaScript they lead to the form instead of bypassing capture. A failed capture prevents checkout navigation.
 
@@ -49,9 +49,9 @@ Razorpay signatures are checked against the raw body with HMAC-SHA256 and consta
 - Limits are persisted with SHA compare-and-swap, not in a serverless process's memory: five submissions per connecting IP per hour, five per email per day, and 100 total per day, including checkout capture. IPs are HMACed; expired counters are removed. Missing proxy identity uses a shared conservative bucket. Add a managed rate-limit service/CAPTCHA before larger campaigns.
 - The private `leads.json` schema is `{version,leads,jobs,limits}`. Leads are indexed by a hash of normalized email and contain `{email,url,plan,permission,updatedAt}`. Jobs retain the original authorized input snapshot. Paid activation records are retained to deduplicate later events for the same subscription.
 - An hourly recovery workflow, also triggered after failed audit workflows, retries queued, interrupted or unclaimed dispatches. Claims prevent duplicate active audits, and provider delivery or registration failures are visible as failed Actions jobs. Five dispatch attempts are allowed; exhausted jobs are marked `failed` for investigation. Completed free-audit records expire after 30 days. This lightweight GitHub-backed store has a 900 KB safety cap and is intended for low-volume intake.
-- GitHub scheduling, Actions availability, SMTP acceptance and inbox filtering are external dependencies. The requested two-minute banner is an estimate, with an adjacent queue/delivery explanation. No code can guarantee 100% availability, exact execution times, or inbox placement. A crash after email acceptance but before completion bookkeeping can still cause an at-least-once retry email.
+- GitHub scheduling, Actions availability, SMTP acceptance and inbox filtering are external dependencies. The requested ~45-second progress banner is an estimate after a runner starts, with an adjacent queue/delivery explanation. No code can guarantee 100% availability, exact execution times, or inbox placement. A crash after email acceptance but before completion bookkeeping can still cause an at-least-once retry email.
 - Only the three requested activation events are handled. Cancellation, expiry, refunds and suspension do **not** automatically remove monitoring; those lifecycle policies need a separate agreed implementation. Advanced authenticated/custom flows and additional plan schedules still require configuration.
-- The fallback email button remains available when the API cannot confirm submission. Raw provider/network errors are never shown. No FormSubmit delivery path remains in the automation flow.
+- The audit form never creates a mailto link or opens Outlook. A network/API failure stays on the page with a clean retry message. No FormSubmit delivery path remains in the automation flow.
 
 ## Acceptance checks
 
@@ -61,3 +61,7 @@ Razorpay signatures are checked against the raw body with HMAC-SHA256 and consta
 4. Confirm a scheduled run includes the enrolled client and emails its saved recipient. Check Actions failure notifications and jobs marked `failed` in the private queue. Configure an independent uptime/alerting service for production operation.
 
 References: [Vercel Node web-standard handlers](https://vercel.com/docs/functions/runtimes/node-js), [GitHub workflow dispatch](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event), [Razorpay signatures and retries](https://razorpay.com/docs/webhooks/validate-test/), [subscription payloads](https://razorpay.com/docs/webhooks/subscriptions/), [Nodemailer Gmail setup](https://nodemailer.com/usage/using-gmail/).
+
+## Report activation links
+
+All HTML and plain-text reports, email summaries, and attachments include the three live Razorpay activation links. The selected plan is validated, carried through workflow_dispatch and saved in the report for resending. Gmail acceptance is recorded for the exact client recipient, with the owner BCC. SMTP acceptance is not proof of inbox arrival; confirm the live test in the recipient mailbox. A free-audit customer who pays from a report link can activate the saved authorized website; no paid tier is guessed when hosted checkout omits plan metadata.
